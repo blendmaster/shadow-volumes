@@ -22,7 +22,7 @@ using namespace EZGraphics;
 
 class ViewerEventHandlers : public TrackballHandler, public MenuCreator {
 
-  Program *pgmGouraud, *pgmPhong, *pgmFlat, *pgmWFlat, *pgmDouble;
+  Program *pgmShadow;
   vec3 mx, mn;
   float maxdim;
   vec3 center;
@@ -31,56 +31,19 @@ class ViewerEventHandlers : public TrackballHandler, public MenuCreator {
   VertexArray *vaGouraudPhong;
   int ts;
 
-  enum mode { FLAT, WFLAT, DOUBLE, PHONG, GOURAUD };
-
   static int reor;
-  static mode which;
 
 public:
 
   /* -------------------------------------- */
 
-  // You probably won't need to change this, except for requesting additional 
-  // features for the frame buffer; here, we request RGB+depth buffer and 
+  // You probably won't need to change this, except for requesting additional
+  // features for the frame buffer; here, we request RGB+depth buffer and
   // double buffering.We also ask for 800x800 window.
 
   ViewerEventHandlers ( int argc, char **argv ) :
     TrackballHandler(argc,argv,GLUT_DEPTH|GLUT_DOUBLE|GLUT_RGB|GLUT_MULTISAMPLE,800,800)
   {
-  }
-
-  /* -------------------------------------- */
-
-  // Functions that handle menu items; notice that:
-  // (1) all of them take no arguments and return nothing
-  // (2) all of them are static
-  // Because of (2), they can operate only on static data members.
-  // Remember that static data members have to be defined outside the
-  // class (see below)
-
-  static void do_Flat()
-  {
-    which = FLAT;
-  }
-
-  static void do_Double()
-  {
-    which = DOUBLE;
-  }
-
-  static void do_WFlat()
-  {
-    which = WFLAT;
-  }
-
-  static void do_Phong()
-  {
-    which = PHONG;
-  }
-
-  static void do_Gouraud()
-  {
-    which = GOURAUD;
   }
 
   static void reorient()
@@ -97,33 +60,10 @@ public:
   {
     // Compile and link GLSL programs. The last three include geometry shader
 
-    cout << "Creating Gouraud program..." << endl;
-    pgmGouraud = createProgram(
-			       ShaderFile(Vert,"shaders/Gouraud/vtxGouraud.glsl"),
-			       ShaderFile(Frag,"shaders/Gouraud/frgGouraud.glsl")
-			       );
-    cout << "Creating Phong program..." << endl;
-    pgmPhong = createProgram(
-			     ShaderFile(Vert,"shaders/Phong/vtxPhong.glsl"),
-			     ShaderFile(Frag,"shaders/Phong/frgPhong.glsl")
-			     );
-    cout << "Creating Flat program..." << endl;
-    pgmFlat = createProgram(
-			    ShaderFile(Vert,"shaders/Flat/vtxFlat.glsl"),
-			    ShaderFile(Geom,"shaders/Flat/geoFlat.glsl"),
-			    ShaderFile(Frag,"shaders/Flat/frgFlat.glsl")
-			    );
-    cout << "Creating WFlat program..." << endl;
-    pgmWFlat = createProgram(
-			    ShaderFile(Vert,"shaders/Wire/vtxWire.glsl"),
-			    ShaderFile(Geom,"shaders/Wire/geoWire.glsl"),
-			    ShaderFile(Frag,"shaders/Wire/frgWire.glsl")
-			    );
-    cout << "Creating Double program..." << endl;
-    pgmDouble = createProgram(
-			    ShaderFile(Vert,"shaders/Double/vtxDouble.glsl"),
-			    ShaderFile(Geom,"shaders/Double/geoDouble.glsl"),
-			    ShaderFile(Frag,"shaders/Double/frgDouble.glsl")
+    pgmShadow = createProgram(
+			    ShaderFile(Vert,"shaders/Shadow/vtxShadow.glsl"),
+			    ShaderFile(Geom,"shaders/Shadow/geoShadow.glsl"),
+			    ShaderFile(Frag,"shaders/Shadow/frgShadow.glsl")
 			    );
 
     // Mesh is a helper class for dealing with triangle meshes.
@@ -136,14 +76,14 @@ public:
     //  getCenter() returns center of the bounding box
     //  get*Corner() returns corners of the bounding box; Upper = (max x coord, max y coord, max z coord),
     //                      Lower = (min x coord, min y coord, min z coord)
-    //  getMaxDim(): maximum dimension of the bounding box, or largest value of 
+    //  getMaxDim(): maximum dimension of the bounding box, or largest value of
     //            max coord-min coord over all coordinates; rough estimate of size of the mesh
     //  getTriangleCount(), getVertexCount() - return what they say
     //  getVertexTable(): returns vertex table (array of type vec3* with num of entries = #vertices)
     //  getVertexNormals(): returns area weighted vertex normals (array of type vec3*)
     //  getTriangleTable(): returns triangle table, array of type uvec3* with #entries = #triangles
-    //                      entries are unsigned so it can be readily used as data for the index buffer 
-    // CAUTION: DON'T delete any arrays returned by the methods of the mesh class! Or you'll corrupt 
+    //                      entries are unsigned so it can be readily used as data for the index buffer
+    // CAUTION: DON'T delete any arrays returned by the methods of the mesh class! Or you'll corrupt
     //            your mesh object
 
     center = M.getCenter();
@@ -152,16 +92,16 @@ public:
     maxdim = M.getMaxDim();
     ts = M.getTriangleCount();
 
-    // Buffer class represents OpenGL Vertex Buffer Objects (VBOs), basically arrays residing 
+    // Buffer class represents OpenGL Vertex Buffer Objects (VBOs), basically arrays residing
     //  in the GPU memory.
     // The constructor creates a buffer object and sends data to it.
     // Versions of the constructor used here take #entries of an array as the first argument and
-    //  the pointer to the array as the second argument (that pointer can be of type 
+    //  the pointer to the array as the second argument (that pointer can be of type
     //  ivec[234]*, uvec[234]* or vec[234]*).
 
     vloc = new Buffer(M.getVertexCount(),M.getVertexTable());
     vnormal = new Buffer(M.getVertexCount(),M.getVertexNormals());
-    
+
     // IndexBuffer class represent index buffer objects; Note that they are required to have
     //  entries of an unsigned integer type.
     // create an index buffer; first entry: size of array, second: array (types allowed:
@@ -171,15 +111,15 @@ public:
 
     // Build a vertex array object (VAO; they are represented by VertexArray class).
     // Basically, a VAO tells the system where to find attributes for a vertex.
-    // Here, (after creating an empty VAO) we tell it to look up attribute #0 from the 
-    //  buffer vloc and attribute #1 - from the buffer vnormal. These have to match the location 
+    // Here, (after creating an empty VAO) we tell it to look up attribute #0 from the
+    //  buffer vloc and attribute #1 - from the buffer vnormal. These have to match the location
     //  layout qualifier in the vertex shader. In our case, we have these lines in the vertex shaders:
     //   layout(location=0) in vec3 coord;  [for vertex i, use vloc[i] as value]
     //   layout(location=1) in vec3 normal; [ ... use vnormal[i] as value]
 
     vaGouraudPhong = new VertexArray;
     vaGouraudPhong->attachAttribute(0,vloc);
-    vaGouraudPhong->attachAttribute(1,vnormal); 
+    vaGouraudPhong->attachAttribute(1,vnormal);
 
     // enable culling and depth test; use white when clearing the color buffer
 
@@ -198,13 +138,6 @@ public:
     //  (e.g. a static method). See one of the comments above.
 
     beginMenu();
-    beginSubMenu("Mode");
-    addMenuEntry("Flat",do_Flat);
-    addMenuEntry("Wireframe-like flat",do_WFlat);
-    addMenuEntry("Double",do_Double);
-    addMenuEntry("Gouraud",do_Gouraud);
-    addMenuEntry("Phong",do_Phong);
-    endSubMenu();
     addMenuEntry("Reorient",reorient);
     endMenu();
   }
@@ -212,7 +145,7 @@ public:
   /* -------------------------------------- */
 
   // This method is called to redraw the contents of the window.
-  // In this version of the code, it's called continuously to 
+  // In this version of the code, it's called continuously to
   //  estimate fps rate.
 
   virtual void draw()
@@ -223,15 +156,7 @@ public:
 
     // make p point to the program we want to use...
 
-    Program *p;
-    switch(which)
-      {
-      case GOURAUD: p = pgmGouraud; break;
-      case PHONG: p = pgmPhong; break;
-      case FLAT: p = pgmFlat; break;
-      case WFLAT: p = pgmWFlat; break;
-      case DOUBLE: p = pgmDouble; break;
-      }
+    Program *p = pgmShadow;
 
     // Reverse orientation in case the model's triangles are oriented incorrectly.
     // Back and front face culling are just names for <0 or >0 test performed when
@@ -242,7 +167,7 @@ public:
       glCullFace(GL_BACK);
     else
       glCullFace(GL_FRONT);
-    
+
     // Here, we set values of the uniform variables in the shader.
     // MV = modelview matrix
     // P = projection matrix
@@ -252,7 +177,7 @@ public:
     // getAspectRatio() = width/height of the window.
     // getZoom is also inherited from TrackballHandler (FOV controlled by the middle mouse button)
 
-    // MV first transforms the model so that its bounding box tightly fits into the cube 
+    // MV first transforms the model so that its bounding box tightly fits into the cube
     //  extending from -1 to 1 in all dimensions; then rotates and moves 'forward' by 20 with
     //  respect to the camera.
 
@@ -264,9 +189,7 @@ public:
 		  );
 
     // this matrix is used to transform normals; basically, rotate them with the mesh
-
-    if (which!=FLAT && which!=WFLAT) 
-      p->setUniform("NM",getRotation());
+    p->setUniform("NM",getRotation());
 
     // place camera at the origin, facing -z; near/far clip planes 18 and 22 away.
 
@@ -302,14 +225,13 @@ public:
   /* -------------------------------------- */
 
   // This method is called when the user presses ESC over the window.
-  // Here, we nicely delete all OpenGL objects used; It's OK if you 
+  // Here, we nicely delete all OpenGL objects used; It's OK if you
   // let the OS do it for you!
 
   virtual void cleanup()
   {
     cout << "cleaning up..." << endl;
-    delete pgmGouraud;
-    delete pgmPhong;
+    delete pgmShadow;
     delete ix;
     delete vnormal;
     delete vloc;
@@ -324,7 +246,6 @@ public:
 
 // definitions of static members - if you add more, include them here
 
-ViewerEventHandlers::mode ViewerEventHandlers::which = ViewerEventHandlers::PHONG;
 int ViewerEventHandlers::reor = 1.0;
 
 /* -------------------------------------- */
