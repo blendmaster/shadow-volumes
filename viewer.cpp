@@ -188,6 +188,7 @@ public:
     glClearColor(1.0, 1.0, 1.0, 1.0);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_MULTISAMPLE);
+    glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // Build menu; the code is set up so that it is automatically attached to the right mouse button
     // It should clear what happens here (try to run the code and press the right mouse button
