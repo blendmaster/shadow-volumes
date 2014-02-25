@@ -14,7 +14,7 @@ flat out int isShadow;
 
 void EmitEdge(vec3 a, vec3 b)
 {
-    vec3 l = vec3(1,2, -5);
+    vec3 l = lloc;
     // terminology from project description
     vec4 a4 = vec4(a, 1);
     vec4 b4 = vec4(b, 1);

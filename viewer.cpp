@@ -22,7 +22,7 @@ using namespace EZGraphics;
 
 class ViewerEventHandlers : public TrackballHandler, public MenuCreator {
 
-  Program *pgmShadow;
+  Program *pgmShadow, *pgmPhong, *pgmUnlit;
   vec3 mx, mn;
   float maxdim;
   vec3 center;
@@ -42,7 +42,7 @@ public:
   // double buffering.We also ask for 800x800 window.
 
   ViewerEventHandlers ( int argc, char **argv ) :
-    TrackballHandler(argc,argv,GLUT_DEPTH|GLUT_DOUBLE|GLUT_RGB|GLUT_MULTISAMPLE,800,800)
+    TrackballHandler(argc,argv,GLUT_STENCIL|GLUT_DEPTH|GLUT_DOUBLE|GLUT_RGB|GLUT_MULTISAMPLE,800,800)
   {
   }
 
@@ -94,6 +94,14 @@ public:
 			    ShaderFile(Vert,"shaders/Shadow/vtxShadow.glsl"),
 			    ShaderFile(Geom,"shaders/Shadow/geoShadow.glsl"),
 			    ShaderFile(Frag,"shaders/Shadow/frgShadow.glsl")
+			    );
+    pgmUnlit = createProgram(
+			    ShaderFile(Vert,"shaders/Unlit/vtxUnlit.glsl"),
+			    ShaderFile(Frag,"shaders/Unlit/frgUnlit.glsl")
+			    );
+    pgmPhong = createProgram(
+			    ShaderFile(Vert,"shaders/Phong/vtxPhong.glsl"),
+			    ShaderFile(Frag,"shaders/Phong/frgPhong.glsl")
 			    );
 
     // Mesh is a helper class for dealing with triangle meshes.
@@ -183,12 +191,12 @@ public:
 
     // enable culling and depth test; use white when clearing the color buffer
 
-    //glEnable(GL_CULL_FACE);
+    glEnable(GL_CULL_FACE);
     //glCullFace(GL_BACK);
     glClearColor(1.0, 1.0, 1.0, 1.0);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_MULTISAMPLE);
-    glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    //glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // Build menu; the code is set up so that it is automatically attached to the right mouse button
     // It should clear what happens here (try to run the code and press the right mouse button
@@ -203,32 +211,7 @@ public:
     endMenu();
   }
 
-  /* -------------------------------------- */
-
-  // This method is called to redraw the contents of the window.
-  // In this version of the code, it's called continuously to
-  //  estimate fps rate.
-
-  virtual void draw()
-  {
-    // clear color & depth buffers
-
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    // make p point to the program we want to use...
-
-    Program *p = pgmShadow;
-
-    // Reverse orientation in case the model's triangles are oriented incorrectly.
-    // Back and front face culling are just names for <0 or >0 test performed when
-    // deciding if the face should be culled. Note that if front face culling is used,
-    // normals are also reversed before illumination calculations (in the shaders).
-
-    if (reor>0)
-      glCullFace(GL_BACK);
-    else
-      glCullFace(GL_FRONT);
-
+private: void setUniforms(Program * p) {
     // Here, we set values of the uniform variables in the shader.
     // MV = modelview matrix
     // P = projection matrix
@@ -258,7 +241,7 @@ public:
 
     // send light and material data to uniforms
 
-    p->setUniform("lloc",vec3(0.0,0.0,1.0));
+    p->setUniform("lloc",vec3(0.0,3.0,1.0));
     p->setUniform("kd",vec3(0.5,0.7,0.9));
     p->setUniform("ka",vec3(0.5,0.7,0.9));
     p->setUniform("ks",vec3(0.3,0.3,0.3));
@@ -269,17 +252,73 @@ public:
     // reor can be +-1 and is used to reverse the normal direction if front face culling is used
 
     p->setUniform("reor",reor);
+  }
 
-    // turn program p on
+  /* -------------------------------------- */
 
+  // This method is called to redraw the contents of the window.
+  // In this version of the code, it's called continuously to
+  //  estimate fps rate.
+public:
+  virtual void draw()
+  {
+    // clear color & depth & stencil buffers
+
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+    // make p point to the program we want to use...
+
+
+    // Reverse orientation in case the model's triangles are oriented incorrectly.
+    // Back and front face culling are just names for <0 or >0 test performed when
+    // deciding if the face should be culled. Note that if front face culling is used,
+    // normals are also reversed before illumination calculations (in the shaders).
+
+    if (reor>0)
+      glCullFace(GL_BACK);
+    else
+      glCullFace(GL_FRONT);
+
+    // unlit scene
+    glEnable(GL_CULL_FACE);
+    glDisable(GL_STENCIL_TEST);
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    Program *p = pgmUnlit;
+    setUniforms(p);
     p->on();
-
-    // send the vertices to the pipeline adjency mode
-
     vaGouraudPhong->sendToPipelineIndexed(GL_TRIANGLES_ADJACENCY, ix, 0, 6*ts);
+    p->off();
 
-    // turn program off
+    // shadows
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_STENCIL_TEST);
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_FALSE);
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    glStencilFunc(GL_ALWAYS,0,0);
+    glStencilOpSeparate(GL_FRONT,GL_KEEP,GL_KEEP,GL_INCR_WRAP);
+    glStencilOpSeparate(GL_BACK,GL_KEEP,GL_KEEP,GL_DECR_WRAP);
+    p = pgmShadow;
+    setUniforms(p);
+    p->on();
+    vaGouraudPhong->sendToPipelineIndexed(GL_TRIANGLES_ADJACENCY, ix, 0, 6*ts);
+    p->off();
 
+    // lit scene
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_STENCIL_TEST);
+    glDepthMask(GL_TRUE);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glStencilFunc(GL_EQUAL,0,0xffff);
+    glStencilOpSeparate(GL_FRONT,GL_KEEP,GL_KEEP,GL_KEEP);
+    glStencilOpSeparate(GL_BACK,GL_KEEP,GL_KEEP,GL_KEEP);
+    glDepthFunc(GL_LEQUAL);
+    p = pgmPhong;
+    setUniforms(p);
+    p->on();
+    vaGouraudPhong->sendToPipelineIndexed(GL_TRIANGLES_ADJACENCY, ix, 0, 6*ts);
     p->off();
   }
 
