@@ -140,9 +140,16 @@ public:
     vloc = new Buffer(M.getVertexCount(),M.getVertexTable());
     vnormal = new Buffer(M.getVertexCount(),M.getVertexNormals());
 
+    cout << "Generating adjacency indices..." << endl;
+
     uvec3* T = M.getTriangleTable();
     ivec3* A = M.getAdjacencyTable();
-    GLuint adj[6 * ts];
+
+    cout << "allocating adjacency index of size " <<  (6 * ts) << endl;
+
+    GLuint *adj = new GLuint[6 * ts];
+
+    cout << "Starting generation..." << endl;
 
     for (int i = 0; i < ts; ++i) {
       adj[6 * i    ] = T[i][0];
@@ -150,11 +157,12 @@ public:
       adj[6 * i + 4] = T[i][2];
 
       // if adjacent triangle exists, use its unshared vertex, otherwise use
-      // the original triangle's 3rd vertex.
+      // the original triangle's opposite vertex.
       adj[6 * i + 1] = A[i][2] != -1 ? unshared_vertex(T[i], T[A[i][2]]) : T[i][2];
       adj[6 * i + 3] = A[i][0] != -1 ? unshared_vertex(T[i], T[A[i][0]]) : T[i][0];
       adj[6 * i + 5] = A[i][1] != -1 ? unshared_vertex(T[i], T[A[i][1]]) : T[i][1];
     }
+    cout << "adjacency indices generated!" << endl;
 
     //for (int i = 0; i < ts; ++i) {
     //  cout << "T[" << i << "] = (" << T[i][0] << ", " << T[i][1] << ", " << T[i][2] << ")" << endl;
@@ -241,7 +249,7 @@ private: void setUniforms(Program * p) {
 
     // send light and material data to uniforms
 
-    p->setUniform("lloc",vec3(0.0,3.0,1.0));
+    p->setUniform("lloc",vec3(30.0,30.0,1.0));
     p->setUniform("kd",vec3(0.5,0.7,0.9));
     p->setUniform("ka",vec3(0.5,0.7,0.9));
     p->setUniform("ks",vec3(0.3,0.3,0.3));
@@ -279,13 +287,24 @@ public:
     else
       glCullFace(GL_FRONT);
 
+    Program *p;
+
+    /*
+    glDisable(GL_CULL_FACE);
+    p = pgmShadow;
+    setUniforms(p);
+    p->on();
+    vaGouraudPhong->sendToPipelineIndexed(GL_TRIANGLES_ADJACENCY, ix, 0, 6*ts);
+    p->off();
+    */
+
     // unlit scene
     glEnable(GL_CULL_FACE);
     glDisable(GL_STENCIL_TEST);
     glDepthFunc(GL_LESS);
     glDepthMask(GL_TRUE);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    Program *p = pgmUnlit;
+    p = pgmUnlit;
     setUniforms(p);
     p->on();
     vaGouraudPhong->sendToPipelineIndexed(GL_TRIANGLES_ADJACENCY, ix, 0, 6*ts);
