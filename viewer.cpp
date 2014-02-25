@@ -51,6 +51,36 @@ public:
     reor = -reor;
   }
 
+  // helper to extract the unshared vertex of triangle b with triangle a
+  static GLuint unshared_vertex(uvec3 a, uvec3 b) {
+    //cout << "a = (" << a[0] << ", " << a[1] << ", " << a[2] << ")" << endl;
+    //cout << "b = (" << b[0] << ", " << b[1] << ", " << b[2] << ")" << endl;
+    bool f[3] = { true, true, true };
+
+    for (int i = 0; i < 3; ++i) {
+      for (int j = 0; j < 3; ++j) {
+        f[i] &= (b[i] != a[j]);
+      }
+    }
+
+    //cout << "f = (" << f[0] << ", " << f[1] << ", " << f[2] << ")" << endl;
+    for (int i = 0; i < 3; ++i) {
+      if (f[i]) {
+        //cout << i << " does not match anything" << endl;
+        return b[i];
+      };
+    }
+
+    cout << "a:" << a[0] << a[1] << a[2] << endl;
+    cout << "b:" << b[0] << b[1] << b[2] << endl;
+    cout << "f:" << f[0] << f[1] << f[2] << endl;
+
+    // can't find unique value, broken
+    assert (false);
+
+    return 0;
+  }
+
   /* -------------------------------------- */
 
   // this mehtod is called once, after the basic OpenGL/glew/glut setup
@@ -102,12 +132,42 @@ public:
     vloc = new Buffer(M.getVertexCount(),M.getVertexTable());
     vnormal = new Buffer(M.getVertexCount(),M.getVertexNormals());
 
+    uvec3* T = M.getTriangleTable();
+    ivec3* A = M.getAdjacencyTable();
+    GLuint adj[6 * ts];
+
+    for (int i = 0; i < ts; ++i) {
+      adj[6 * i    ] = T[i][0];
+      adj[6 * i + 2] = T[i][1];
+      adj[6 * i + 4] = T[i][2];
+
+      // if adjacent triangle exists, use its unshared vertex, otherwise use
+      // the original triangle's 3rd vertex.
+      adj[6 * i + 1] = A[i][2] != -1 ? unshared_vertex(T[i], T[A[i][2]]) : T[i][2];
+      adj[6 * i + 3] = A[i][0] != -1 ? unshared_vertex(T[i], T[A[i][0]]) : T[i][0];
+      adj[6 * i + 5] = A[i][1] != -1 ? unshared_vertex(T[i], T[A[i][1]]) : T[i][1];
+    }
+
+    //for (int i = 0; i < ts; ++i) {
+    //  cout << "T[" << i << "] = (" << T[i][0] << ", " << T[i][1] << ", " << T[i][2] << ")" << endl;
+    //}
+
+    //for (int i = 0; i < ts; ++i) {
+    //  cout << "A[" << i << "] = (" << A[i][0] << ", " << A[i][1] << ", " << A[i][2] << ")" << endl;
+    //}
+
+    //for (int i = 0; i < 6 * ts; ++i) {
+    //  cout << "adj[" << i << "] = " << adj[i] << endl;
+    //}
+
+    //exit(0);
+
+    ix = new IndexBuffer(6 * ts, adj);
+
     // IndexBuffer class represent index buffer objects; Note that they are required to have
     //  entries of an unsigned integer type.
     // create an index buffer; first entry: size of array, second: array (types allowed:
     //  GLubyte*, GLuint*, GLushort*, uvec2*, uvec3*)
-
-    ix = new IndexBuffer(M.getTriangleCount(),M.getTriangleTable());
 
     // Build a vertex array object (VAO; they are represented by VertexArray class).
     // Basically, a VAO tells the system where to find attributes for a vertex.
@@ -123,8 +183,8 @@ public:
 
     // enable culling and depth test; use white when clearing the color buffer
 
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
+    //glEnable(GL_CULL_FACE);
+    //glCullFace(GL_BACK);
     glClearColor(1.0, 1.0, 1.0, 1.0);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_MULTISAMPLE);
@@ -213,9 +273,9 @@ public:
 
     p->on();
 
-    // send the vertices to the pipeline (indexed mode; use triangle table as index)
+    // send the vertices to the pipeline adjency mode
 
-    vaGouraudPhong->sendToPipelineIndexed(GL_TRIANGLES,ix,0,3*ts);
+    vaGouraudPhong->sendToPipelineIndexed(GL_TRIANGLES_ADJACENCY, ix, 0, 6*ts);
 
     // turn program off
 
