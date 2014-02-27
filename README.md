@@ -15,7 +15,19 @@ Models that work with the viewer code can be found here:
 
 # Screenshots
 
-TODO
+![ant.png](./screenshots/ant.png)
+
+![bunny.png](./screenshots/bunny.png)
+
+![hand.png](./screenshots/hand.png)
+
+Shadow volumes don't look quite as nice with low-poly models:
+
+![david.png](./screenshots/david.png)
+
+Models with holes in the mesh generate artifacts (see shadow on legs):
+
+![happy.png](./screenshots/happy.png)
 
 # Running
 
